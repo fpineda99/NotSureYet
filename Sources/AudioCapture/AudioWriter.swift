@@ -2,11 +2,11 @@ import Foundation
 
 // MARK: - Output Format Constants
 
-/// The target audio format for the entire pipeline.
-/// Defined here because the writer is the output contract — upstream
-/// modules (AudioProcessor) convert TO this format.
+/// The target audio format for the capture pipeline.
+/// Sample rate is set at runtime from the system's native rate (usually 48kHz).
+/// Channels and bit depth are fixed — mono Int16 is the standard for speech.
 enum OutputFormat {
-    static let sampleRate: Double = 16000
+    nonisolated(unsafe) static var sampleRate: Double = 48000  // Set from tap format at startup
     static let channels: UInt32 = 1
     static let bitsPerSample: UInt32 = 16
     static let bytesPerSample: UInt32 = bitsPerSample / 8
@@ -24,7 +24,7 @@ protocol AudioWriting: Sendable {
 
 // MARK: - WAV File Writer
 
-/// Writes 16kHz mono 16-bit PCM audio to a WAV file.
+/// Writes mono 16-bit PCM audio to a WAV file at the system's native sample rate.
 ///
 /// WAV format is simple: a 44-byte header describing the audio,
 /// followed by raw PCM samples. We write the header with placeholder

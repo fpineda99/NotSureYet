@@ -5,7 +5,8 @@ import CoreAudio
 ///
 /// The IO callback runs on Apple's real-time audio thread — we do the
 /// bare minimum there (copy data), then dispatch to a background queue
-/// where we convert sample rate/format and write to the output.
+/// where we convert Float32 → Int16 and write to the output.
+/// No sample rate conversion — we keep the native rate for quality.
 ///
 /// Thread safety: The IO block only enqueues data onto processingQueue.
 /// All mutable state (converter, writer) is accessed only from processingQueue.
@@ -26,20 +27,25 @@ final class AudioProcessor: @unchecked Sendable {
         }
         self.inputFormat = inFmt
 
-        // Our target format — driven by the shared OutputFormat constants
+        // Set the output sample rate to match the tap's native rate (usually 48kHz).
+        // No resampling needed — we only convert Float32 → Int16.
+        OutputFormat.sampleRate = inFmt.sampleRate
+
         guard let outFmt = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
-            sampleRate: OutputFormat.sampleRate,
+            sampleRate: inFmt.sampleRate,
             channels: AVAudioChannelCount(OutputFormat.channels),
             interleaved: true
         ) else {
-            throw AudioCaptureError.formatError("Could not create 16kHz Int16 output format")
+            throw AudioCaptureError.formatError(
+                "Could not create Int16 output format at \(Int(inFmt.sampleRate))Hz"
+            )
         }
         self.outputFormat = outFmt
 
         guard let conv = AVAudioConverter(from: inFmt, to: outFmt) else {
             throw AudioCaptureError.formatError(
-                "Could not create converter from \(inFmt.sampleRate)Hz to \(Int(OutputFormat.sampleRate))Hz"
+                "Could not create format converter at \(Int(inFmt.sampleRate))Hz"
             )
         }
         self.converter = conv
@@ -102,9 +108,8 @@ final class AudioProcessor: @unchecked Sendable {
             }
         }
 
-        // Calculate output frame count based on the sample rate ratio
-        let ratio = OutputFormat.sampleRate / inputFormat.sampleRate
-        let outputFrameCount = AVAudioFrameCount(ceil(Double(frameCount) * ratio))
+        // No sample rate conversion — output has same frame count as input
+        let outputFrameCount = frameCount
 
         guard let outputBuffer = AVAudioPCMBuffer(
             pcmFormat: outputFormat, frameCapacity: outputFrameCount

@@ -1,0 +1,9 @@
+#!/bin/bash
+# Wrapper script so you can run `transcribe` from anywhere
+# without manually activating the virtual environment.
+
+# Resolve symlinks to find the real script location
+REAL_PATH="$(python3 -c "import os; print(os.path.realpath('$0'))")"
+SCRIPT_DIR="$(dirname "$REAL_PATH")"
+source "$SCRIPT_DIR/.venv/bin/activate"
+python "$SCRIPT_DIR/transcribe.py" "$@"

@@ -7,3 +7,5 @@ DerivedData/
 .netrc
 .claude/
 .vscode/
+.venv/
+__pycache__/

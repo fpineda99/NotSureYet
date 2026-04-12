@@ -121,38 +121,44 @@ struct AudioCapture: ParsableCommand {
 
     /// Determines the output file path.
     /// If --output is provided, use it as-is.
-    /// Otherwise, auto-generate a timestamped path in ~/.audiocapture/recordings/
+    /// Otherwise, create a session folder in ~/AudioCapture/ and save recording.wav inside it.
+    ///
+    /// Session folder structure:
+    ///   ~/AudioCapture/2026-04-12_13-45-30_lecture/
+    ///     recording.wav      ← this file
+    ///     transcript.json    ← added by transcriber later
+    ///     transcript.txt     ← added by transcriber later
     private func resolveOutputPath() throws -> String {
-        // Custom path takes priority
+        // Custom path takes priority — no session folder
         if let customPath = output {
             return (customPath as NSString).expandingTildeInPath
         }
 
-        // Default directory
+        // Build session folder name from timestamp + optional label
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let recordingsDir = "\(home)/AudioCapture/recordings"
+        let baseDir = "\(home)/AudioCapture"
 
-        // Create directory if it doesn't exist
-        try FileManager.default.createDirectory(
-            atPath: recordingsDir,
-            withIntermediateDirectories: true
-        )
-
-        // Build filename: 2026-04-12_13-45-30.wav or 2026-04-12_13-45-30_lecture.wav
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = formatter.string(from: Date())
 
-        let filename: String
+        let folderName: String
         if let label = label, !label.isEmpty {
-            // Sanitize label: replace spaces/slashes with dashes
             let safe = label.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "-", options: .regularExpression)
-            filename = "\(timestamp)_\(safe).wav"
+            folderName = "\(timestamp)_\(safe)"
         } else {
-            filename = "\(timestamp).wav"
+            folderName = timestamp
         }
 
-        return "\(recordingsDir)/\(filename)"
+        let sessionDir = "\(baseDir)/\(folderName)"
+
+        // Create session folder
+        try FileManager.default.createDirectory(
+            atPath: sessionDir,
+            withIntermediateDirectories: true
+        )
+
+        return "\(sessionDir)/recording.wav"
     }
 }
