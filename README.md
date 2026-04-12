@@ -46,9 +46,9 @@ AudioCapture
 AudioCapture -d 30
 
 # Record with a label for easy identification
-AudioCapture -d 60 -l lecture
-AudioCapture -d 30 -l meeting
-AudioCapture -l girlfriend
+AudioCapture -d 60 -l teams
+AudioCapture -d 30 -l discord
+AudioCapture -l facetime
 
 # Custom output path (overrides default directory)
 AudioCapture -o ~/Desktop/custom.wav -d 10
