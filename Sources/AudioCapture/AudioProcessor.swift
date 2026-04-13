@@ -89,12 +89,12 @@ final class AudioProcessor: @unchecked Sendable {
         let frameCount = AVAudioFrameCount(data.count) / bytesPerFrame
 
         guard frameCount > 0 else {
-            fputs("Warning: received empty audio data (\(data.count) bytes)\n", stderr)
+            fputs("[AudioCapture] Warning: received empty audio data (\(data.count) bytes)\n", stderr)
             return
         }
 
         guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCount) else {
-            fputs("Warning: could not create input buffer for \(frameCount) frames\n", stderr)
+            fputs("[AudioCapture] Warning: could not create input buffer for \(frameCount) frames\n", stderr)
             return
         }
 
@@ -114,7 +114,7 @@ final class AudioProcessor: @unchecked Sendable {
         guard let outputBuffer = AVAudioPCMBuffer(
             pcmFormat: outputFormat, frameCapacity: outputFrameCount
         ) else {
-            fputs("Warning: could not create output buffer for \(outputFrameCount) frames\n", stderr)
+            fputs("[AudioCapture] Warning: could not create output buffer for \(outputFrameCount) frames\n", stderr)
             return
         }
 
@@ -136,7 +136,7 @@ final class AudioProcessor: @unchecked Sendable {
         }
 
         if let error = conversionError {
-            fputs("Conversion error: \(error.localizedDescription)\n", stderr)
+            fputs("[AudioCapture] Conversion error: \(error.localizedDescription)\n", stderr)
             return
         }
 
@@ -144,7 +144,7 @@ final class AudioProcessor: @unchecked Sendable {
         guard outputBuffer.frameLength > 0,
               let int16Data = outputBuffer.int16ChannelData
         else {
-            fputs("Warning: converter produced no output frames\n", stderr)
+            fputs("[AudioCapture] Warning: converter produced no output frames\n", stderr)
             return
         }
 
@@ -154,7 +154,7 @@ final class AudioProcessor: @unchecked Sendable {
         do {
             try writer.write(pcmData)
         } catch {
-            fputs("Write error: \(error.localizedDescription)\n", stderr)
+            fputs("[AudioCapture] Write error: \(error.localizedDescription)\n", stderr)
         }
     }
 }

@@ -56,7 +56,10 @@ final class WAVFileWriter: AudioWriting, @unchecked Sendable {
     }
 
     func write(_ data: Data) throws {
-        guard let handle = fileHandle else { return }
+        guard let handle = fileHandle else {
+            fputs("[AudioCapture] Warning: write called but file is not open\n", stderr)
+            return
+        }
         handle.write(data)
         dataSize += UInt32(data.count)
     }

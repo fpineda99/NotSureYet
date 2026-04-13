@@ -89,3 +89,20 @@ func homeDir() string {
 	}
 	return home
 }
+
+// findExecutable looks for a command in common paths.
+// Falls back to the bare name (relying on PATH) if not found.
+func findExecutable(name string) string {
+	searchPaths := []string{
+		filepath.Join("/usr/local/bin", name),
+		filepath.Join("/opt/homebrew/bin", name),
+		filepath.Join(homeDir(), ".local/bin", name),
+	}
+	for _, path := range searchPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	// Fall back to PATH lookup
+	return name
+}

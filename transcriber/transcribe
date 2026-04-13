@@ -2,8 +2,8 @@
 # Wrapper script so you can run `transcribe` from anywhere
 # without manually activating the virtual environment.
 
-# Resolve symlinks to find the real script location
-REAL_PATH="$(python3 -c "import os; print(os.path.realpath('$0'))")"
+# Resolve symlinks using readlink (works on macOS with -f via perl fallback)
+REAL_PATH="$(perl -e 'use Cwd "abs_path"; print abs_path(@ARGV[0])' "$0")"
 SCRIPT_DIR="$(dirname "$REAL_PATH")"
 source "$SCRIPT_DIR/.venv/bin/activate"
 python "$SCRIPT_DIR/transcribe.py" "$@"

@@ -82,22 +82,6 @@ func GetNewSegments(t *Transcript, lastIndex int) []Segment {
 	return t.Segments[start:]
 }
 
-// GetRecentSegments returns segments from the last N seconds.
-func GetRecentSegments(t *Transcript, lastSeconds float64) []Segment {
-	if len(t.Segments) == 0 {
-		return nil
-	}
-
-	cutoff := t.Segments[len(t.Segments)-1].End - lastSeconds
-	var result []Segment
-	for _, seg := range t.Segments {
-		if seg.Start >= cutoff {
-			result = append(result, seg)
-		}
-	}
-	return result
-}
-
 // FormatChunk turns segments into a readable prompt for Claude.
 func FormatChunk(segments []Segment) string {
 	var b strings.Builder

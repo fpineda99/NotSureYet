@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Session manages a Claude Code CLI session for note-taking.
@@ -17,13 +19,21 @@ type Session struct {
 // StartSession creates a new Claude Code session with a system prompt.
 // It sends an initial message and captures the session ID from the output.
 func StartSession(workDir, systemPrompt, initialMessage string) (*Session, error) {
+	// Write system prompt to a temp file to avoid argument length issues
+	promptFile, err := os.CreateTemp("", "autonote-prompt-*.txt")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create prompt file: %w", err)
+	}
+	defer os.Remove(promptFile.Name())
+	promptFile.WriteString(systemPrompt)
+	promptFile.Close()
+
 	args := []string{
-		"-p",
-		"--system-prompt", systemPrompt,
+		"-p", initialMessage,
+		"--system-prompt-file", promptFile.Name(),
 		"--output-format", "json",
 		"--max-turns", "5",
-		"--dangerously-skip-permissions",
-		initialMessage,
+		"--allowedTools", "Read,Edit,Write",
 	}
 
 	output, err := runClaude(workDir, args)
@@ -42,12 +52,11 @@ func StartSession(workDir, systemPrompt, initialMessage string) (*Session, error
 // ResumeSession sends a message to an existing Claude Code session.
 func (s *Session) Resume(message string) (string, error) {
 	args := []string{
-		"-p",
+		"-p", message,
 		"--resume", s.ID,
 		"--output-format", "json",
 		"--max-turns", "5",
-		"--dangerously-skip-permissions",
-		message,
+		"--allowedTools", "Read,Edit,Write",
 	}
 
 	output, err := runClaude(s.WorkDir, args)
@@ -60,12 +69,19 @@ func (s *Session) Resume(message string) (string, error) {
 
 // runClaude executes the claude CLI and returns its stdout.
 func runClaude(workDir string, args []string) (string, error) {
-	cmd := exec.Command("claude", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	claudePath := findExecutable("claude")
+	cmd := exec.CommandContext(ctx, claudePath, args...)
 	cmd.Dir = workDir
 	cmd.Stderr = os.Stderr
 
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("claude timed out after 2 minutes")
+		}
 		return "", fmt.Errorf("claude command failed: %w", err)
 	}
 

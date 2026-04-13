@@ -13,7 +13,9 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import mlx_whisper
@@ -68,18 +70,28 @@ def save_transcript(result: dict, wav_path: Path) -> Path:
 
         transcript["segments"].append(segment)
 
-    # Save JSON (for pipeline)
+    # Save JSON (for pipeline) — atomic write to prevent corruption
     json_path = output_dir / "transcript.json"
-    with open(json_path, "w") as f:
-        json.dump(transcript, f, indent=2, ensure_ascii=False)
+    _atomic_write(json_path, json.dumps(transcript, indent=2, ensure_ascii=False))
 
-    # Save plain text (for humans)
+    # Save plain text (for humans) — atomic write
     txt_path = output_dir / "transcript.txt"
-    with open(txt_path, "w") as f:
-        for seg in transcript["segments"]:
-            f.write(seg["text"] + "\n")
+    text_content = "\n".join(seg["text"] for seg in transcript["segments"]) + "\n"
+    _atomic_write(txt_path, text_content)
 
     return json_path
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Write to a temp file then rename — prevents partial/corrupted files."""
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        os.replace(tmp_path, path)
+    except Exception:
+        os.unlink(tmp_path)
+        raise
 
 
 def find_wav_files(path: Path) -> list[Path]:
@@ -136,16 +148,24 @@ def main():
 
     print(f"Found {len(wav_files)} file(s) to transcribe.", file=sys.stderr)
 
+    failed = 0
     for wav_path in wav_files:
-        result = transcribe_file(wav_path, args.model)
-        json_path = save_transcript(result, wav_path)
+        try:
+            result = transcribe_file(wav_path, args.model)
+            json_path = save_transcript(result, wav_path)
 
-        text = result.get("text", "").strip()
-        preview = text[:100] + "..." if len(text) > 100 else text
-        print(f"  → {json_path.parent.name}/transcript.json ({len(text)} chars)", file=sys.stderr)
-        print(f"    \"{preview}\"", file=sys.stderr)
+            text = result.get("text", "").strip()
+            preview = text[:100] + "..." if len(text) > 100 else text
+            print(f"  → {json_path.parent.name}/transcript.json ({len(text)} chars)", file=sys.stderr)
+            print(f"    \"{preview}\"", file=sys.stderr)
+        except Exception as e:
+            failed += 1
+            print(f"  ✗ {wav_path.name}: {e}", file=sys.stderr)
 
-    print(f"\nDone. {len(wav_files)} file(s) transcribed.", file=sys.stderr)
+    succeeded = len(wav_files) - failed
+    print(f"\nDone. {succeeded}/{len(wav_files)} file(s) transcribed.", file=sys.stderr)
+    if failed > 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

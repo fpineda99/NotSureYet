@@ -54,14 +54,15 @@ const (
 )
 
 func runCommand(m mode) {
-	label, profile, interval, duration, sessionDir := parseFlags()
+	label, profile, extraPrompt, interval, duration, sessionDir := parseFlags()
 
 	o := &Orchestrator{
-		SessionDir: sessionDir,
-		Label:      label,
-		Profile:    profile,
-		Interval:   interval,
-		Duration:   duration,
+		SessionDir:  sessionDir,
+		Label:       label,
+		Profile:     profile,
+		ExtraPrompt: extraPrompt,
+		Interval:    interval,
+		Duration:    duration,
 	}
 
 	// Validate: T, TW, W require an existing session directory
@@ -153,6 +154,14 @@ func runDelete() {
 // observed behavior. If Claude Code changes its encoding scheme, this may break.
 // Worst case: the session file isn't deleted but nothing else breaks.
 func deleteClaudeSession(sessionDir string, sessionID string) {
+	// Validate session ID to prevent path traversal
+	for _, c := range sessionID {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-') {
+			fmt.Fprintf(os.Stderr, "Warning: invalid session ID format, skipping cleanup\n")
+			return
+		}
+	}
+
 	home := homeDir()
 	encoded := strings.ReplaceAll(sessionDir, "/", "-")
 	encoded = strings.ReplaceAll(encoded, "_", "-")
@@ -189,7 +198,7 @@ func runProfilesList() {
 	}
 }
 
-func parseFlags() (label, profile string, interval, duration time.Duration, sessionDir string) {
+func parseFlags() (label, profile, extraPrompt string, interval, duration time.Duration, sessionDir string) {
 	profile = "lecture"
 	interval = 60 * time.Second
 
@@ -204,6 +213,11 @@ func parseFlags() (label, profile string, interval, duration time.Duration, sess
 		case "-p", "--profile":
 			if i+1 < len(args) {
 				profile = args[i+1]
+				i++
+			}
+		case "-e", "--extra-prompt":
+			if i+1 < len(args) {
+				extraPrompt = args[i+1]
 				i++
 			}
 		case "-i", "--interval":
@@ -245,10 +259,11 @@ Commands:
   delete    Delete a session folder
 
 Options:
-  -l, --label <name>       Session label (e.g., lecture, meeting)
-  -p, --profile <name>     Context profile for note-taking (default: lecture)
-  -i, --interval <dur>     Processing interval for live modes (default: 60s)
-  -d, --duration <dur>     Recording duration (default: until Ctrl+C)
+  -l, --label <name>         Session label (e.g., lecture, meeting)
+  -p, --profile <name>       Context profile for note-taking (default: lecture)
+  -e, --extra-prompt <text>  Extra instructions appended to the profile prompt
+  -i, --interval <dur>       Processing interval for live modes (default: 60s)
+  -d, --duration <dur>       Recording duration (default: until Ctrl+C)
 
 Examples:
   autonote LTW -l lecture -p lecture

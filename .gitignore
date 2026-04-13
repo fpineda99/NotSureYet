@@ -9,3 +9,15 @@ DerivedData/
 .vscode/
 .venv/
 __pycache__/
+
+# Tauri app
+app/node_modules/
+app/dist/
+app/src-tauri/target/
+app/src-tauri/gen/
+
+# Go
+notate/autonote
+
+# Bun
+bun.lockb
