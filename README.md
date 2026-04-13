@@ -1,149 +1,166 @@
-# NotSureYet
+# AutoNote
 
-A personal productivity tool that captures system audio, transcribes it, and (soon) extracts key notes via LLM agents.
+Capture system audio, transcribe it, and extract notes — all automated. Includes a CLI pipeline and a native macOS desktop app.
 
-## Pipeline
-
-Each recording gets its own session folder with all related files together:
+## How It Works
 
 ```
-~/AudioCapture/2026-04-12_14-20-00_lecture/
-├── recording.wav       ← AudioCapture (Phase 1)
-├── transcript.json     ← Transcriber (Phase 2) — for pipeline
-├── transcript.txt      ← Transcriber (Phase 2) — for you
-└── notes.json          ← Phase 3 (coming) — extracted key points
+Audio In → AudioCapture → Transcriber → Claude Code → Notes
+(48kHz WAV)   (MLX Whisper)   (LLM note-taking)
 ```
 
-## Phase 1: AudioCapture
-
-A macOS CLI tool that captures system audio via Core Audio Taps API.
-
-### How It Works
+Each session gets its own folder with everything together:
 
 ```
-System Audio (48kHz Float32)
-     |
-     v
-AudioTapManager ---- Creates a "tap" on all system audio.
-     |                Audio still plays through speakers normally.
-     v
-AudioProcessor ----- Receives raw audio on a real-time thread, dispatches to a
-     |                background queue, converts 48kHz Float32 -> 16kHz Int16 mono.
-     v
-AudioWriter -------- Writes converted PCM data to a WAV file (or raw to stdout).
+~/AudioCapture/2026-04-12_lecture/
+├── recording.wav       ← captured audio
+├── transcript.json     ← timestamped transcript (for pipeline)
+├── transcript.txt      ← plain text transcript (for you)
+└── notes.md            ← extracted notes (by Claude)
 ```
 
-### Files
-
-| File | Role |
-|------|------|
-| `AudioCapture.swift` | Entry point. Parses CLI args, wires modules, handles shutdown. |
-| `AudioTapManager.swift` | Talks to macOS Core Audio. Creates tap + aggregate device. |
-| `AudioProcessor.swift` | Converts audio format. Bridges real-time thread to background queue. |
-| `AudioWriter.swift` | `AudioWriting` protocol + WAV file writer + stdout writer. |
-| `Errors.swift` | All error types with human-readable messages. |
-
-### Usage
+## Quick Start
 
 ```bash
-# Build and install (one-time)
-swift build -c release && sudo cp .build/release/AudioCapture /usr/local/bin/AudioCapture
+# Full pipeline — record, transcribe, and take notes
+autonote LTW -l lecture -p lecture
 
-# Record until Ctrl+C
-AudioCapture
+# Just record audio
+autonote L -l meeting
 
-# Record for 30 seconds
-AudioCapture -d 30
+# Record and transcribe (no notes)
+autonote LT -l call
 
-# Record with a label for easy identification
-AudioCapture -d 60 -l teams
-AudioCapture -d 30 -l discord
-AudioCapture -l facetime
+# Generate notes from an existing session
+autonote W ~/AudioCapture/2026-04-12_lecture/ -p lecture
 
-# Custom output path (overrides session folder)
-AudioCapture -o ~/Desktop/custom.wav -d 10
-
-# Verbose mode (shows format info)
-AudioCapture -d 10 -v
-
-# Stream raw PCM to stdout (for piping to other tools)
-AudioCapture --raw-stdout | python transcribe.py
-
-# Show all options
-AudioCapture -h
+# List available profiles
+autonote profiles
 ```
 
-### Default Output
+## Installation
 
-Each recording creates a session folder in `~/AudioCapture/`:
+### Prerequisites
 
-```
-~/AudioCapture/
-├── 2026-04-12_13-45-30/
-│   └── recording.wav
-├── 2026-04-12_14-20-00_lecture/
-│   └── recording.wav
-├── 2026-04-12_19-30-15_facetime/
-│   └── recording.wav
-```
+- macOS 15+
+- Screen Recording permission (prompted on first run)
+- Python 3.10+
+- Go 1.21+
+- Node.js + Bun (for the desktop app)
 
-## Phase 2: Transcriber
-
-A Python script that transcribes WAV files using MLX Whisper (Apple Silicon optimized).
-
-### Setup
+### Build & Install
 
 ```bash
+# 1. AudioCapture (Swift)
+swift build -c release
+sudo cp .build/release/AudioCapture /usr/local/bin/AudioCapture
+sudo codesign --force --sign - /usr/local/bin/AudioCapture
+
+# 2. Transcriber (Python)
 cd transcriber
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+sudo ln -sf $(pwd)/transcribe /usr/local/bin/transcribe
+
+# 3. Autonote (Go)
+cd notate
+go build -o autonote .
+sudo cp autonote /usr/local/bin/autonote
+sudo codesign --force --sign - /usr/local/bin/autonote
+
+# 4. Install profiles
+mkdir -p ~/.notate/profiles
+cp profiles/*.md ~/.notate/profiles/
+
+# 5. Desktop app (optional)
+cd app
+bun install
+bun run tauri dev
 ```
 
-### Usage
+## Project Structure
+
+```
+├── Sources/AudioCapture/    Swift CLI — captures macOS system audio
+├── transcriber/             Python — MLX Whisper speech-to-text
+├── notate/                  Go — orchestrator + Claude Code integration
+├── profiles/                Context profiles for different scenarios
+├── app/                     Tauri + React desktop app
+│   ├── src/                 React frontend
+│   ├── src-tauri/           Rust backend
+│   └── tray.html            System tray panel
+└── README.md
+```
+
+## CLI Commands
+
+| Command | What It Does |
+|---------|-------------|
+| `autonote L` | Record audio only |
+| `autonote LT` | Record + transcribe |
+| `autonote LTW` | Record + transcribe + notes (full pipeline) |
+| `autonote T <dir>` | Transcribe existing recording |
+| `autonote TW <dir>` | Transcribe + notes |
+| `autonote W <dir>` | Notes from existing transcript |
+| `autonote profiles` | List available profiles |
+| `autonote delete <dir>` | Delete a session |
+
+### Options
+
+```
+-l, --label <name>         Session label (e.g., lecture, meeting)
+-p, --profile <name>       Context profile (default: lecture)
+-e, --extra-prompt <text>  Additional instructions for the note-taker
+-i, --interval <dur>       Processing interval (default: 60s)
+-d, --duration <dur>       Recording duration (default: until Ctrl+C)
+```
+
+## Profiles
+
+Profiles tell the LLM what to extract. Stored in `~/.notate/profiles/`:
+
+| Profile | Purpose |
+|---------|---------|
+| `lecture` | Assignments, exam info, key concepts |
+| `personal` | Places, plans, preferences, things to remember |
+| `meeting` | Action items, decisions, follow-ups |
+| `interview` | Questions asked, key topics, next steps |
+
+Create custom profiles by adding a `.md` file to `~/.notate/profiles/`.
+
+## Desktop App
+
+The Tauri app provides a visual interface for managing sessions:
+
+- **Left sidebar** — browse sessions, search, manage profiles
+- **Center** — rich text editor (TipTap) for viewing/editing notes
+- **Right sidebar** — embedded terminal for Claude Code chat, session info
+- **System tray** — start/stop recordings from the menu bar
+
+### Run the app
 
 ```bash
-# Activate the virtual environment first
-source transcriber/.venv/bin/activate
-
-# Transcribe a session folder
-python transcriber/transcribe.py ~/AudioCapture/2026-04-12_14-20-00_lecture/
-
-# Transcribe all sessions
-python transcriber/transcribe.py ~/AudioCapture/
-
-# Use a different model (tiny, base, small, medium, large)
-python transcriber/transcribe.py -m mlx-community/whisper-small-mlx ~/AudioCapture/2026-04-12_14-20-00_lecture/
-
-# Show all options
-python transcriber/transcribe.py -h
-```
-
-### Output
-
-Transcripts are saved alongside the recording in the same session folder:
-
-```json
-{
-  "source": "/path/to/recording.wav",
-  "text": "the full transcript as one string",
-  "segments": [
-    {
-      "start": 0.0,
-      "end": 4.5,
-      "text": "what was said in this chunk",
-      "words": [{"word": "each", "start": 0.1, "end": 0.3}]
-    }
-  ]
-}
+cd app && bun run tauri dev
 ```
 
 ## Audio Format
 
-16kHz, mono, 16-bit PCM WAV — the standard input for Whisper.
+48kHz, mono, 16-bit PCM WAV — native system quality. Whisper handles resampling internally.
+
+## Tests
+
+```bash
+# Go tests
+cd notate && go test ./...
+
+# Python tests
+cd transcriber && source .venv/bin/activate && python test_transcribe.py
+```
 
 ## Requirements
 
-- macOS 15+
-- Screen Recording permission (prompted on first run)
-- Python 3.10+ (for transcriber)
+- macOS 15+ (Apple Silicon recommended)
+- Screen Recording permission
+- Python 3.10+ with MLX Whisper
+- Claude Code CLI (for note generation)
